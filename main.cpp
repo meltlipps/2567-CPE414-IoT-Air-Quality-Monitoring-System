@@ -4,6 +4,11 @@
 #include <Adafruit_SSD1306.h>
 #include <SoftwareSerial.h>
 
+#define BLINK_GPIO_2 GPIO_NUM_2
+#define SCREEN_WIDTH 128                                       // OLED display width, in pixels
+#define SCREEN_HEIGHT 64                                       // OLED display height, in pixels
+Adafruit_SSD1306 oled(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, -1); // create SSD1306
+
 HardwareSerial mySerial(2); // RX, TX
 unsigned int pm1 = 0;
 unsigned int pm2_5 = 0;
@@ -12,10 +17,11 @@ unsigned int pm10 = 0;
 // Task handles
 TaskHandle_t sensorTaskHandle;
 TaskHandle_t printTaskHandle;
+TaskHandle_t oledTaskHandle;
 
 void readSensorTask(void *parameter)
 {
-    while (1)   
+    while (1)
     {
         int index = 0;
         char value;
@@ -47,26 +53,20 @@ void readSensorTask(void *parameter)
             index++;
         }
         while (mySerial.available())
-            Serial.println("index");
-            Serial.println(index);
-            Serial.println("Value");
-            Serial.println(value);
-            Serial.println("read");
-            Serial.println(mySerial.read());
             mySerial.read(); // Clear remaining data
-            /*Serial.println("index");
-            Serial.println(index);
-            Serial.println("Value");
-            Serial.println(value);
-            Serial.println("read");
-            Serial.println(mySerial.read());*/
+        /*Serial.println("index");
+        Serial.println(index);
+        Serial.println("Value");
+        Serial.println(value);
+        Serial.println("read");
+        Serial.println(mySerial.read());*/
         vTaskDelay(pdMS_TO_TICKS(1000)); // Delay 1 second
     }
 }
 
 void printTask(void *parameter)
 {
-    while (1) 
+    while (1)
     {
         Serial.print("{ ");
         Serial.print("\"pm1\": ");
@@ -83,34 +83,95 @@ void printTask(void *parameter)
     }
 }
 
+void oledshow(void *parameter)
+{
+    while (1)
+    {
+            oled.clearDisplay();
+            oled.drawRect(1, 1, 127, 63, WHITE);
+            oled.setTextSize(1);
+            oled.setTextColor(WHITE); // text color
+            oled.setCursor(3, 2);
+            oled.println("Air sensor");
+            oled.setCursor(5, 15);
+            oled.println("pm1  :");
+            oled.setCursor(40, 15);
+            oled.println(pm1);
+            oled.setCursor(60, 15);
+            oled.println("ug/m3");
+            oled.setCursor(5, 25);
+            oled.println("pm2.5:");
+            oled.setCursor(40, 25);
+            oled.println(pm2_5);
+            oled.setCursor(60, 25);
+            oled.println("ug/m3");
+            oled.setCursor(5, 35);
+            oled.println("pm10 :");
+            oled.setCursor(40, 35);
+            oled.println(pm10);
+            oled.setCursor(60, 35);
+            oled.println("ug/m3");
+            oled.display();
+            delay(2000); // Pause for 2 seconds
+
+    }
+}
+
 void setup()
 {
+    Serial.begin(9600);
+    mySerial.begin(9600, SERIAL_8N1, 16, 17);
+  // SSD1306_SWITCHCAPVCC = generate display voltage from 3.3V internally
+  if(!oled.begin(SSD1306_SWITCHCAPVCC, 0x3C)) { 
+    Serial.println(F("SSD1306 allocation failed"));
+    for(;;); // Don't proceed, loop forever
+  }
+
+  // Show initial display buffer contents on the screen --
+  // the library initializes this with an Adafruit splash screen.
+
     // Initialize Serial Monitor
-    Serial.begin(9600); // initialize serial
+    /*Serial.begin(9600); // initialize serial
     mySerial.begin(9600, SERIAL_8N1, 16, 17);
     Serial.println("Setup started");
+    oled.clearDisplay(); // clear display
+    
+    oled.setTextSize(2);      // text size
+    oled.setTextColor(WHITE); // text color
+    oled.setCursor(50, 20);   // position to display
+    oled.drawRect(10, 10, 100, 40, WHITE); // draw a rectangle
+    oled.println('0');    // display count
+    oled.display();    // show on OLED*/
 
     // Create FreeRTOS tasks
     xTaskCreatePinnedToCore(
-        readSensorTask,  // Task function
-        "Read Sensor",   // Name of the task
-        2048,            // Stack size in words
-        NULL,            // Task input parameter
-        1,               // Priority of the task
+        readSensorTask,    // Task function
+        "Read Sensor",     // Name of the task
+        2048,              // Stack size in words
+        NULL,              // Task input parameter
+        1,                 // Priority of the task
         &sensorTaskHandle, // Task handle
-        1);              // Core where the task should run
+        1);                // Core where the task should run
 
     xTaskCreatePinnedToCore(
-        printTask,       // Task function
-        "Print Data",    // Name of the task
+        printTask,        // Task function
+        "Print Data",     // Name of the task
+        2048,             // Stack size in words
+        NULL,             // Task input parameter
+        1,                // Priority of the task
+        &printTaskHandle, // Task handle
+        1);               // Core where the task should run
+
+    xTaskCreatePinnedToCore(
+        oledshow,        // Task function
+        "Oled show",     // Name of the task
         2048,            // Stack size in words
         NULL,            // Task input parameter
         1,               // Priority of the task
-        &printTaskHandle, // Task handle
+        &oledTaskHandle, // Task handle
         1);              // Core where the task should run
 }
 
 void loop()
 {
-    
 }
