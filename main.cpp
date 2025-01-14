@@ -3,17 +3,22 @@
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
 #include <SoftwareSerial.h>
-
+#include <OneWire.h>
+#include <DallasTemperature.h>
 #define BLINK_GPIO_2 GPIO_NUM_2
 #define SCREEN_WIDTH 128                                       // OLED display width, in pixels
 #define SCREEN_HEIGHT 64                                       // OLED display height, in pixels
 Adafruit_SSD1306 oled(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, -1); // create SSD1306
-
+const int oneWireBus = 4;  //temp s
+OneWire oneWire(oneWireBus);//temp
+DallasTemperature sensors(&oneWire); //temp
 HardwareSerial mySerial(2); // RX, TX
 unsigned int pm1 = 0;
 unsigned int pm2_5 = 0;
 unsigned int pm10 = 0;
 
+/*unsigned int temperatureC = sensors.getTempCByIndex(0);
+unsigned int temperatureF = sensors.getTempFByIndex(0);*/
 // Task handles
 TaskHandle_t sensorTaskHandle;
 TaskHandle_t printTaskHandle;
@@ -26,7 +31,7 @@ void readSensorTask(void *parameter)
         int index = 0;
         char value;
         char previousValue;
-
+        
         while (mySerial.available())
         {
             value = mySerial.read();
@@ -61,6 +66,10 @@ void readSensorTask(void *parameter)
         Serial.println("read");
         Serial.println(mySerial.read());*/
         vTaskDelay(pdMS_TO_TICKS(1000)); // Delay 1 second
+        
+        
+  //delay(5000);
+    
     }
 }
 
@@ -68,6 +77,9 @@ void printTask(void *parameter)
 {
     while (1)
     {
+    sensors.requestTemperatures(); 
+     int temperatureC = sensors.getTempCByIndex(0);
+     int temperatureF = sensors.getTempFByIndex(0); 
         Serial.print("{ ");
         Serial.print("\"pm1\": ");
         Serial.print(pm1);
@@ -78,7 +90,12 @@ void printTask(void *parameter)
         Serial.print("\"pm10\": ");
         Serial.print(pm10);
         Serial.println(" ug/m3 }");
-
+        Serial.println("Temp C");
+        Serial.print(temperatureC);
+        Serial.println("ºC");
+        Serial.println("Temp F");
+        Serial.print(temperatureF);
+        Serial.println("ºF");
         vTaskDelay(pdMS_TO_TICKS(1000)); // Delay 1 second
     }
 }
@@ -86,7 +103,10 @@ void printTask(void *parameter)
 void oledshow(void *parameter)
 {
     while (1)
-    {
+    {       
+        sensors.requestTemperatures(); 
+        int temperatureC = sensors.getTempCByIndex(0);
+        int temperatureF = sensors.getTempFByIndex(0); 
             oled.clearDisplay();
             oled.drawRect(1, 1, 127, 63, WHITE);
             oled.setTextSize(1);
@@ -111,6 +131,18 @@ void oledshow(void *parameter)
             oled.println(pm10);
             oled.setCursor(60, 35);
             oled.println("ug/m3");
+            oled.setCursor(5, 45);
+            oled.println("TempC:");
+            oled.setCursor(40, 45);
+            oled.println(temperatureC);
+            oled.setCursor(60, 45);
+            oled.println("C");
+            oled.setCursor(5, 55);
+            oled.println("TempF:");
+            oled.setCursor(40, 55);
+            oled.println(temperatureF);
+            oled.setCursor(60, 55);
+            oled.println("F");
             oled.display();
             delay(2000); // Pause for 2 seconds
 
