@@ -6,101 +6,91 @@
 #include <OneWire.h>         // ไลบรารีสำหรับการสื่อสาร OneWire
 #include <DallasTemperature.h> // ไลบรารีสำหรับเซ็นเซอร์วัดอุณหภูมิ Dallas
 
-// กำหนดค่าพารามิเตอร์สำหรับ OLED
-#define SCREEN_WIDTH 128    // กำหนดความกว้างของหน้าจอ OLED
-#define SCREEN_HEIGHT 64    // กำหนดความสูงของหน้าจอ OLED
+// กำหนดขนาดหน้าจอ OLED
+#define SCREEN_WIDTH 128  // ความกว้างของ OLED
+#define SCREEN_HEIGHT 64  // ความสูงของ OLED
 
-// สร้างวัตถุ OLED SSD1306
+// สร้างวัตถุสำหรับ OLED
 Adafruit_SSD1306 oled(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, -1);
 
-// กำหนดขา OneWire ที่เชื่อมต่อกับเซ็นเซอร์ Dallas
+// กำหนดขาพินสำหรับการเชื่อมต่อ OneWire
 const int oneWireBus = 4;
 
-// สร้างวัตถุสำหรับการสื่อสาร OneWire และเซ็นเซอร์ Dallas
+// สร้างวัตถุสำหรับการสื่อสารผ่าน OneWire และเซ็นเซอร์ Dallas
 OneWire oneWire(oneWireBus);
 DallasTemperature sensors(&oneWire);
 
-// สร้าง Software Serial สำหรับการสื่อสารผ่าน RX และ TX
-HardwareSerial mySerial(2); // ใช้ Serial2 พร้อมระบุ RX = 16, TX = 17
+// สร้าง Software Serial สำหรับการสื่อสาร UART
+HardwareSerial mySerial(2); // ใช้ UART2 ที่ RX = 16, TX = 17
 
-// ตัวแปรเก็บค่าฝุ่น PM1, PM2.5, และ PM10
+// ตัวแปรสำหรับเก็บค่าฝุ่น PM1, PM2.5, และ PM10
 unsigned int pm1 = 0;
 unsigned int pm2_5 = 0;
 unsigned int pm10 = 0;
 
-// ตัวแปรสำหรับ Semaphore และ Mutex
-SemaphoreHandle_t dataSemaphore;  // Semaphore สำหรับแจ้งว่ามีข้อมูล Sensor ใหม่
-SemaphoreHandle_t oledSemaphore;  // Semaphore สำหรับควบคุมการเข้าถึง OLED
-SemaphoreHandle_t dataMutex;      // Mutex สำหรับป้องกันการเข้าถึงตัวแปรพร้อมกัน
+// สร้าง Semaphore และ Mutex สำหรับควบคุมการเข้าถึงทรัพยากรร่วม
+SemaphoreHandle_t dataSemaphore;  // แจ้งว่าเซ็นเซอร์มีข้อมูลใหม่
+SemaphoreHandle_t oledSemaphore;  // ควบคุมการเข้าถึง OLED
+SemaphoreHandle_t dataMutex;      // ป้องกันการเข้าถึงข้อมูลพร้อมกัน
 
 // ตัวแปรเก็บ Task Handle ของแต่ละ Task
-TaskHandle_t sensorTaskHandle;
-TaskHandle_t printTaskHandle;
-TaskHandle_t oledTaskHandle;
+TaskHandle_t sensorTaskHandle;  // สำหรับ Task อ่านค่าฝุ่น
+TaskHandle_t printTaskHandle;   // สำหรับ Task แสดงผลใน Serial Monitor
+TaskHandle_t oledTaskHandle;    // สำหรับ Task แสดงผลบน OLED
 
-// Task สำหรับอ่านค่าจากเซ็นเซอร์ PM
-void readSensorTask(void *parameter)
-{
-    while (1) // Loop ทำงานตลอดเวลา
-    {
-        int index = 0;        // ตัวนับตำแหน่งในข้อมูลเซ็นเซอร์
+// ฟังก์ชันสำหรับเข้าสู่ Deep Sleep
+void enterDeepSleep() {
+    Serial.println("Entering deep sleep..."); // แจ้งว่า ESP32 กำลังเข้าสู่ Deep Sleep
+    esp_sleep_enable_timer_wakeup(10 * 1000000); // ตั้งปลุก ESP32 หลังจาก 10 วินาที
+    esp_deep_sleep_start(); // เข้าสู่ Deep Sleep
+}
+
+// Task สำหรับอ่านค่าฝุ่นจากเซ็นเซอร์
+void readSensorTask(void *parameter) {
+    while (1) { // Loop ทำงานตลอดเวลา
+        int index = 0;        // ตำแหน่งข้อมูลใน Data Frame
         char value;           // เก็บค่าที่อ่านจากเซ็นเซอร์
-        char previousValue;   // เก็บค่าก่อนหน้าเพื่อนำไปคำนวณ
+        char previousValue;   // เก็บค่าก่อนหน้าเพื่อนำมาคำนวณ
 
-        if (xSemaphoreTake(dataMutex, portMAX_DELAY)) // ล็อก Mutex เพื่อป้องกันการเข้าถึงตัวแปรพร้อมกัน
-        {
-            while (mySerial.available()) // ตรวจสอบว่ามีข้อมูลจากเซ็นเซอร์หรือไม่
-            {
+        if (xSemaphoreTake(dataMutex, portMAX_DELAY)) { // ล็อก Mutex เพื่อป้องกันการเข้าถึงข้อมูลพร้อมกัน
+            while (mySerial.available()) { // ตรวจสอบว่ามีข้อมูลจากเซ็นเซอร์หรือไม่
                 value = mySerial.read(); // อ่านค่าจากเซ็นเซอร์
-                // ตรวจสอบ Data Header ของเซ็นเซอร์
-                if ((index == 0 && value != 0x42) || (index == 1 && value != 0x4d))
-                {
-                    Serial.println("Cannot find the data header."); // แจ้งว่าไม่พบ Data Header
+                if ((index == 0 && value != 0x42) || (index == 1 && value != 0x4d)) { // ตรวจสอบ Data Header
+                    Serial.println("Cannot find the data header."); // หากไม่พบ Header ให้แสดงข้อความ
                 }
-                // เก็บค่า PM1, PM2.5, PM10 ตามตำแหน่งใน Data Frame
-                if (index == 4 || index == 6 || index == 8 || index == 10 || index == 12 || index == 14)
-                {
-                    previousValue = value; // เก็บค่าก่อนหน้า
+                // เก็บค่าฝุ่น PM1, PM2.5 และ PM10
+                if (index == 4 || index == 6 || index == 8 || index == 10 || index == 12 || index == 14) {
+                    previousValue = value; // เก็บค่าในตำแหน่งก่อนหน้า
+                } else if (index == 5) {
+                    pm1 = 256 * previousValue + value; // คำนวณ PM1
+                } else if (index == 7) {
+                    pm2_5 = 256 * previousValue + value; // คำนวณ PM2.5
+                } else if (index == 9) {
+                    pm10 = 256 * previousValue + value; // คำนวณ PM10
                 }
-                else if (index == 5)
-                {
-                    pm1 = 256 * previousValue + value; // คำนวณค่า PM1
-                }
-                else if (index == 7)
-                {
-                    pm2_5 = 256 * previousValue + value; // คำนวณค่า PM2.5
-                }
-                else if (index == 9)
-                {
-                    pm10 = 256 * previousValue + value; // คำนวณค่า PM10
-                }
-                index++; // เพิ่มตัวนับ
+                index++; // เลื่อนตำแหน่งข้อมูลใน Data Frame
             }
             while (mySerial.available())
-                mySerial.read(); // ล้างข้อมูลที่เหลืออยู่
+                mySerial.read(); // ล้างข้อมูลค้างในบัฟเฟอร์
 
             xSemaphoreGive(dataMutex); // ปลดล็อก Mutex
         }
 
-        xSemaphoreGive(dataSemaphore); // แจ้ง Task อื่นว่ามีข้อมูลใหม่พร้อมใช้งาน
+        xSemaphoreGive(dataSemaphore); // แจ้ง Task อื่นว่าข้อมูลพร้อม
         vTaskDelay(pdMS_TO_TICKS(1000)); // หน่วงเวลา 1 วินาที
     }
 }
 
-// Task สำหรับพิมพ์ค่าที่อ่านได้
-void printTask(void *parameter)
-{
-    while (1)
-    {
-        if (xSemaphoreTake(dataSemaphore, portMAX_DELAY)) // รอจนกว่าข้อมูลใหม่พร้อม
-        {
+// Task สำหรับพิมพ์ค่าฝุ่นและอุณหภูมิใน Serial Monitor
+void printTask(void *parameter) {
+    while (1) {
+        if (xSemaphoreTake(dataSemaphore, portMAX_DELAY)) { // รอจนกว่าข้อมูลใหม่พร้อม
             sensors.requestTemperatures(); // เรียกอุณหภูมิจากเซ็นเซอร์ Dallas
             int temperatureC = sensors.getTempCByIndex(0); // อ่านอุณหภูมิในหน่วย C
             int temperatureF = sensors.getTempFByIndex(0); // อ่านอุณหภูมิในหน่วย F
 
-            if (xSemaphoreTake(dataMutex, portMAX_DELAY)) // ล็อก Mutex เพื่อเข้าถึงตัวแปร
-            {
-                // แสดงข้อมูล PM และอุณหภูมิใน Serial Monitor
+            if (xSemaphoreTake(dataMutex, portMAX_DELAY)) { // ล็อก Mutex เพื่อเข้าถึงตัวแปร
+                // แสดงข้อมูลฝุ่นและอุณหภูมิใน Serial Monitor
                 Serial.print("{ ");
                 Serial.print("\"pm1\": ");
                 Serial.print(pm1);
@@ -120,25 +110,20 @@ void printTask(void *parameter)
                 xSemaphoreGive(dataMutex); // ปลดล็อก Mutex
             }
         }
-
         vTaskDelay(pdMS_TO_TICKS(1000)); // หน่วงเวลา 1 วินาที
     }
 }
 
-// Task สำหรับแสดงค่าบน OLED
-void oledshow(void *parameter)
-{
-    while (1)
-    {
-        sensors.requestTemperatures(); // อ่านค่าจากเซ็นเซอร์ Dallas
+// Task สำหรับแสดงค่าฝุ่นและอุณหภูมิบน OLED
+void oledshow(void *parameter) {
+    while (1) {
+        sensors.requestTemperatures(); // อ่านอุณหภูมิจากเซ็นเซอร์ Dallas
         int temperatureC = sensors.getTempCByIndex(0); // อ่านอุณหภูมิในหน่วย C
         int temperatureF = sensors.getTempFByIndex(0); // อ่านอุณหภูมิในหน่วย F
 
-        if (xSemaphoreTake(oledSemaphore, portMAX_DELAY)) // ล็อกการเข้าถึง OLED
-        {
-            if (xSemaphoreTake(dataMutex, portMAX_DELAY)) // ล็อก Mutex เพื่อป้องกันการเข้าถึงพร้อมกัน
-            {
-                // ล้างหน้าจอและแสดงข้อมูล
+        if (xSemaphoreTake(oledSemaphore, portMAX_DELAY)) { // ล็อก Semaphore เพื่อควบคุม OLED
+            if (xSemaphoreTake(dataMutex, portMAX_DELAY)) { // ล็อก Mutex สำหรับการอ่านข้อมูล
+                // ล้างหน้าจอ OLED และแสดงข้อมูล
                 oled.clearDisplay();
                 oled.drawRect(1, 1, 127, 63, WHITE);
                 oled.setTextSize(1);
@@ -180,23 +165,22 @@ void oledshow(void *parameter)
                 xSemaphoreGive(dataMutex); // ปลดล็อก Mutex
             }
 
-            xSemaphoreGive(oledSemaphore); // ปลดล็อก OLED
+            xSemaphoreGive(oledSemaphore); // ปลดล็อก Semaphore ของ OLED
         }
 
         vTaskDelay(pdMS_TO_TICKS(2000)); // หน่วงเวลา 2 วินาที
+        enterDeepSleep(); // เข้าสู่ Deep Sleep หลังจบการแสดงผล
     }
 }
 
-// ฟังก์ชันเริ่มต้น
-void setup()
-{
-    Serial.begin(9600); // เริ่ม Serial Monitor
-    mySerial.begin(9600, SERIAL_8N1, 16, 17); // เริ่ม Software Serial
+// ฟังก์ชัน setup
+void setup() {
+    Serial.begin(9600); // เริ่มต้น Serial Monitor
+    mySerial.begin(9600, SERIAL_8N1, 16, 17); // เริ่มต้น Software Serial
 
-    if (!oled.begin(SSD1306_SWITCHCAPVCC, 0x3C)) // เริ่ม OLED
-    {
+    if (!oled.begin(SSD1306_SWITCHCAPVCC, 0x3C)) { // เริ่มต้น OLED
         Serial.println(F("SSD1306 allocation failed")); // แจ้งข้อผิดพลาด
-        for (;;);
+        for (;;); // หยุดการทำงานหาก OLED ไม่สามารถเริ่มต้นได้
     }
 
     // สร้าง Semaphore และ Mutex
@@ -204,15 +188,14 @@ void setup()
     oledSemaphore = xSemaphoreCreateBinary();
     dataMutex = xSemaphoreCreateMutex();
 
-    xSemaphoreGive(oledSemaphore); // ให้สิทธิ์การใช้งาน OLED เริ่มต้น
+    xSemaphoreGive(oledSemaphore); // ปลดล็อก OLED เริ่มต้น
 
-    // สร้าง Task สำหรับ RTOS
+    // สร้าง Task
     xTaskCreatePinnedToCore(readSensorTask, "Read Sensor", 2048, NULL, 1, &sensorTaskHandle, 1);
     xTaskCreatePinnedToCore(printTask, "Print Data", 2048, NULL, 1, &printTaskHandle, 1);
     xTaskCreatePinnedToCore(oledshow, "Oled show", 2048, NULL, 1, &oledTaskHandle, 1);
 }
 
-void loop()
-{
-    // Loop หลักไม่มีการใช้งาน เนื่องจาก Task ทำงานทั้งหมด
+void loop() {
+    // ไม่ต้องใช้งาน loop หลัก เนื่องจาก Task จัดการทุกอย่าง
 }
