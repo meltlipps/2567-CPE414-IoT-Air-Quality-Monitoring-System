@@ -1,4 +1,4 @@
-#include <Arduino.h>         // ไลบรารีพื้นฐานสำหรับโปรแกรม Arduino
+#include <Arduino.h>
 #include <Wire.h>            // ไลบรารีสำหรับ I2C communication
 #include <Adafruit_GFX.h>    // ไลบรารีกราฟิกสำหรับการแสดงผลบน OLED
 #include <Adafruit_SSD1306.h>// ไลบรารีสำหรับ OLED SSD1306
@@ -7,9 +7,8 @@
 #include <DallasTemperature.h> // ไลบรารีสำหรับเซ็นเซอร์วัดอุณหภูมิ Dallas
 #include "FS.h"
 #include <WiFi.h>
-#include <esp_sleep.h>       // ไลบรารีสำหรับ Deep Sleep
+#include <WebServer.h>
 
-// กำหนดค่าพารามิเตอร์สำหรับ OLED
 #define SCREEN_WIDTH 128    // กำหนดความกว้างของหน้าจอ OLED
 #define SCREEN_HEIGHT 64    // กำหนดความสูงของหน้าจอ OLED
 
@@ -30,8 +29,7 @@ HardwareSerial mySerial(2); // ใช้ Serial2 พร้อมระบุ RX 
 unsigned int pm1 = 0;
 unsigned int pm2_5 = 0;
 unsigned int pm10 = 0;
-unsigned int temperatureC = sensors.getTempCByIndex(0);
-unsigned int temperatureF = sensors.getTempFByIndex(0);
+
 // ตัวแปรสำหรับ Semaphore และ Mutex
 SemaphoreHandle_t dataSemaphore;  // Semaphore สำหรับแจ้งว่ามีข้อมูล Sensor ใหม่
 SemaphoreHandle_t oledSemaphore;  // Semaphore สำหรับควบคุมการเข้าถึง OLED
@@ -42,7 +40,81 @@ TaskHandle_t sensorTaskHandle;
 TaskHandle_t printTaskHandle;
 TaskHandle_t oledTaskHandle;
 
+const char* ssid = "Toon";
+const char* password = "bananatoon";
+
+WebServer server(8080);
+
+
+
+
+
+const int ledPin = 23;
+bool ledState = false;
 // Task สำหรับอ่านค่าจากเซ็นเซอร์ PM
+
+// HTML content for the web page
+const char* htmlContent = R"rawliteral(
+<!DOCTYPE HTML><html>
+<html>
+<head>
+    <title>ESP32 Air Quality Monitor</title>
+    <style>
+        body { font-family: Arial, sans-serif; text-align: center; }
+        h1 { color: #0F3376; padding: 10px; }
+        .data { font-size: 1.5rem; margin: 10px; }
+    </style>
+</head>
+<body>
+    <h1>ESP32 Air Quality Monitor</h1>
+    <p class="data">PM1: <span id="pm1">Loading...</span> ug/m³</p>
+    <p class="data">PM2.5: <span id="pm2_5">Loading...</span> ug/m³</p>
+    <p class="data">PM10: <span id="pm10">Loading...</span> ug/m³</p>
+    <p class="data">Temperature: <span id="temperatureC">Loading...</span> °C / <span id="temperatureF">Loading...</span> °F</p>
+    
+    <script>
+        function fetchData() {
+            fetch('/data')
+            .then(response => response.json())
+            .then(data => {
+                document.getElementById('pm1').innerText = data.pm1;
+                document.getElementById('pm2_5').innerText = data.pm2_5;
+                document.getElementById('pm10').innerText = data.pm10;
+                document.getElementById('temperatureC').innerText = data.temperatureC;
+                document.getElementById('temperatureF').innerText = data.temperatureF;
+            })
+            .catch(error => console.error('Error fetching data:', error));
+        }
+        setInterval(fetchData, 2000);
+        fetchData();
+    </script>
+</body>
+</html>
+)rawliteral";
+
+// Function to handle the root path
+void handleRoot() {
+  server.send(200, "text/html", htmlContent);
+}
+
+// Function to handle the toggle path
+void handleToggle() {
+  ledState = !ledState;
+  digitalWrite(ledPin, ledState ? HIGH : LOW);
+  server.send(200, "text/plain", ledState ? "ON" : "OFF");
+}
+
+void handleSensorData() {
+    String json = "{";
+    json += "\"pm1\": " + String(pm1) + ",";
+    json += "\"pm2_5\": " + String(pm2_5) + ",";
+    json += "\"pm10\": " + String(pm10) + ",";
+    json += "\"temperatureC\": " + String(sensors.getTempCByIndex(0)) + ",";
+    json += "\"temperatureF\": " + String(sensors.getTempFByIndex(0));
+    json += "}";
+    server.send(200, "application/json", json);
+}
+
 void readSensorTask(void *parameter)
 {
     while (1) // Loop ทำงานตลอดเวลา
@@ -51,7 +123,8 @@ void readSensorTask(void *parameter)
         char value;           // เก็บค่าที่อ่านจากเซ็นเซอร์
         char previousValue;   // เก็บค่าก่อนหน้าเพื่อนำไปคำนวณ
         sensors.requestTemperatures(); // อ่านค่าจากเซ็นเซอร์ Dallas
-        
+        int temperatureC = sensors.getTempCByIndex(0);
+        int temperatureF = sensors.getTempFByIndex(0);
         if (xSemaphoreTake(dataMutex, portMAX_DELAY)) // ล็อก Mutex เพื่อป้องกันการเข้าถึงตัวแปรพร้อมกัน
         {
             while (mySerial.available()) // ตรวจสอบว่ามีข้อมูลจากเซ็นเซอร์หรือไม่
@@ -96,7 +169,9 @@ void printTask(void *parameter)
     {
         if (xSemaphoreTake(dataSemaphore, portMAX_DELAY)) // รอจนกว่าข้อมูลใหม่พร้อม
         {
-            
+            sensors.requestTemperatures();
+            int temperatureC = sensors.getTempCByIndex(0);
+            int temperatureF = sensors.getTempFByIndex(0);
             
             if (xSemaphoreTake(dataMutex, portMAX_DELAY)) // ล็อก Mutex เพื่อเข้าถึงตัวแปร
             {
@@ -132,7 +207,9 @@ void oledshow(void *parameter)
 {
     while (1)
     {
-        
+        sensors.requestTemperatures();
+        int temperatureC = sensors.getTempCByIndex(0);
+        int temperatureF = sensors.getTempFByIndex(0);
         if (xSemaphoreTake(oledSemaphore, portMAX_DELAY)) // ล็อกการเข้าถึง OLED
         {
             
@@ -187,10 +264,9 @@ void oledshow(void *parameter)
     }
 }
 
-// ฟังก์ชันเริ่มต้น
 void setup()
 {
-    Serial.begin(9600); // เริ่ม Serial Monitor
+    Serial.begin(115200); // เริ่ม Serial Monitor
     mySerial.begin(9600, SERIAL_8N1, 16, 17); // เริ่ม Software Serial
 
     if (!oled.begin(SSD1306_SWITCHCAPVCC, 0x3C)) // เริ่ม OLED
@@ -199,7 +275,36 @@ void setup()
         while (1);
     }
 
+    WiFi.begin(ssid, password);
+    while (WiFi.status() != WL_CONNECTED) {
+        delay(500);
+        Serial.print(".");
+    }
+    Serial.println("\nWiFi connected!");
+    Serial.print("IP Address: ");
+    Serial.println(WiFi.localIP());
+    server.begin();
+    Serial.println("Web server started!");
 
+    server.on("/", handleRoot);
+    server.on("/data", handleSensorData);
+
+    /*pinMode(ledPin, OUTPUT);
+    digitalWrite(ledPin, LOW);*/
+
+    // Route for root / web page
+    //server.on("/", handleRoot);
+
+    // Route to toggle LED state
+    //server.on("/toggle", handleToggle);
+
+    
+    //ws.onEvent(onWebSocketEvent);
+    //server.addHandler(&ws);
+
+    // Start server
+    /*server.begin();
+    Serial.println("WebSocket server started!");*/
 
      if (esp_sleep_get_wakeup_cause() == ESP_SLEEP_WAKEUP_TIMER)
     {
@@ -216,14 +321,15 @@ void setup()
     xTaskCreatePinnedToCore(printTask, "Print Data", 2048, NULL, 1, &printTaskHandle, 1);
     xTaskCreatePinnedToCore(oledshow, "Oled show", 2048, NULL, 1, &oledTaskHandle, 1);
 
-    esp_sleep_enable_timer_wakeup(10 * 1000000); // 10 วินาที
+    /*esp_sleep_enable_timer_wakeup(10 * 1000000); // 10 วินาที
     Serial.println("Entering deep sleep...");
-    vTaskDelay(pdMS_TO_TICKS(5000)); // รอให้ Serial แสดงผลก่อน
-    esp_deep_sleep_start(); // เข้าสู่ Deep Sleep
+    vTaskDelay(pdMS_TO_TICKS(500000000)); // รอให้ Serial แสดงผลก่อน5000
+    esp_deep_sleep_start(); // เข้าสู่ Deep Sleep*/
 
 }
 
 void loop()
 {
-    
+    server.handleClient();
+    delay(10);
 }
