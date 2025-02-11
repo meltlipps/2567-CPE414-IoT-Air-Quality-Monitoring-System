@@ -1,4 +1,4 @@
-```markdown
+
 # 🌍 IoT Air Quality Monitoring System
 
 ## 📌 Overview
@@ -47,7 +47,7 @@ Make sure **VSCode + PlatformIO** is installed.
 ```sh
 git clone https://github.com/your-repo/IoT-Air-Quality.git
 cd IoT-Air-Quality
-```
+
 
 ### **3️⃣ Install Dependencies**
 ```sh
