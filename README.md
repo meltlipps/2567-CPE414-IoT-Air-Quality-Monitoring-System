@@ -1,72 +1,109 @@
+```markdown
+# 🌍 IoT Air Quality Monitoring System
 
-# 🌍 **IoT Air Quality Monitoring System**
-
-This project is an **IoT-based air quality monitoring system**. It measures **PM1.0, PM2.5, PM10**, and **temperature**.  
-Data is displayed on an **OLED screen** and via a **WiFi-enabled Web Server**, providing real-time air quality monitoring.
-
----
-
-## 🚀 **Features**
-- 📏 **Accurate measurements**: PM1.0, PM2.5, PM10  
-- 🌡 **Temperature monitoring**: Celsius (°C) and Fahrenheit (°F)  
-- 📺 **OLED Display** for real-time data visualization  
-- 🕹 **User control**: Switch button for navigating OLED menu  
-- 🔋 **Power saving mode**: OLED screen turns off when idle  
-- 💡 **LED indicators**: Shows air quality levels (Green, Yellow, Red)  
-- 🌐 **WiFi & Web Server**: Monitor air quality from a web browser  
-- 📡 **Real-time updates**: AJAX-powered live data via JSON API  
+## 📌 Overview
+This project is an **IoT-based air quality monitoring system** using **ESP32**. It measures real-time air pollution (**PM1, PM2.5, PM10**) and temperature. The data is displayed on an **OLED screen** and shared through a **web server**.
 
 ---
 
-## 🛠 **Hardware Requirements**
-
-| Component                 | Description                                  |
-|---------------------------|----------------------------------------------|
-| **ESP32**                 | Microcontroller for system control          |
-| **PMS7003 Laser Sensor**  | Measures PM1.0, PM2.5, PM10                 |
-| **DS18B20 Temperature Sensor** | Tracks environmental temperature         |
-| **OLED Display (SSD1306)**| Displays air quality data                   |
-| **LED Indicator**         | Shows air quality levels using colors       |
-| **Switch Button**         | Used for OLED menu navigation               |
-
----
-
-## 💻 **Software Requirements**
-- **VS Code** with **PlatformIO** (Recommended)  
-- **Arduino IDE** (Optional)  
-- **ESP32 Board Manager**  
-- **Required Libraries**:  
-  - `Adafruit SSD1306`  
-  - `Adafruit GFX`  
-  - `PMS Library`  
-  - `DallasTemperature`  
-  - `OneWire`  
-  - `Wire`  
-  - `WiFi`  
-  - `WebServer`  
+## ✨ Features
+✅ Real-time air quality & temperature monitoring  
+✅ OLED display for easy reading  
+✅ Web server with live data  
+✅ **Button control** to change displayed data  
+✅ **Auto OLED sleep mode** to save power  
+✅ **LED indicators** for air quality (🔴 Red = Bad, 🟡 Yellow = Medium, 🟢 Green = Good)  
+✅ **FreeRTOS** for better performance  
+✅ **WiFi connectivity** for remote access  
 
 ---
 
-## 🔧 **Installation Guide**
+## 🛠️ Hardware Components
+- **ESP32** - Microcontroller with WiFi
+- **PMS7003 Laser Dust Sensor** - Measures PM1, PM2.5, and PM10
+- **DS18B20 Temperature Sensor** - Reads temperature
+- **OLED SSD1306** - Displays data
+- **MH-Sensor-Series** - Extra sensors for environment data
+- **LEDs & Switches** - User interface and status display
 
-### 1️⃣ **Install Tools**
-- Download **[Visual Studio Code](https://code.visualstudio.com/)**  
-- Install **PlatformIO Extension** or **Arduino IDE**  
-- Add the **ESP32 Board Manager** in Arduino/PlatformIO  
+---
 
-### 2️⃣ **Install Libraries**
-If using Arduino IDE:  
-- Open **Library Manager**: `Sketch -> Include Library -> Manage Libraries`  
-- Search and install required libraries (see list above).  
+## 💻 Software and Libraries
+- **PlatformIO & VSCode** - Development tools
+- **Adafruit GFX & SSD1306** - OLED display library
+- **Wire & OneWire** - Sensor communication
+- **DallasTemperature** - Reads temperature sensor
+- **WiFi & WebServer** - For web services
+- **PMS7003 Library** - Air quality sensor library
+- **FreeRTOS** - Task management
 
-If using PlatformIO, add this to `platformio.ini`:  
-```ini
-lib_deps =
-    adafruit/Adafruit SSD1306
-    adafruit/Adafruit GFX Library
-    env/pmsx003
-    milesburton/DallasTemperature
-    paulstoffregen/OneWire
-    wire
-    WiFi
-    WebServer
+---
+
+## 🚀 Installation & Setup
+### **1️⃣ Install PlatformIO**
+Make sure **VSCode + PlatformIO** is installed.
+
+### **2️⃣ Clone the Repository**
+```sh
+git clone https://github.com/your-repo/IoT-Air-Quality.git
+cd IoT-Air-Quality
+```
+
+### **3️⃣ Install Dependencies**
+```sh
+pio run
+```
+
+### **4️⃣ Configure WiFi**
+Edit `src/main.cpp` and update WiFi settings:
+```cpp
+const char* ssid = "YOUR_WIFI_SSID";
+const char* password = "YOUR_WIFI_PASSWORD";
+```
+
+### **5️⃣ Upload Code to ESP32**
+```sh
+pio run --target upload
+```
+
+### **6️⃣ Monitor Serial Output**
+```sh
+pio device monitor --baud 115200
+```
+
+---
+
+## 🌐 Web Server API
+| Endpoint  | Description |
+|-----------|------------|
+| `/`       | Shows web page with live data |
+| `/data`   | Returns air quality data in JSON format |
+
+---
+
+## 🔄 Development Process
+This project follows **Agile Development**:
+1. **Requirement Analysis** - Define system needs.
+2. **Planning** - Plan how to build it.
+3. **Develop Product** - Write code and connect hardware.
+4. **Review & Test** - Check if it works correctly.
+5. **Deploy** - Make it ready for real use.
+
+---
+
+## 🚧 Future Plans
+🔹 Add deep sleep mode to save power  
+🔹 Improve web server with data history  
+🔹 Add more sensors for better monitoring  
+
+---
+
+## 💡 Credits
+Developed by **[Your Name/Team]** as part of the **CPE414 IoT Project**.  
+For questions, contact **[Your Email/GitHub Link]**.  
+
+---
+
+📌 **"Monitor the air, protect the future!"** 🌱
+```
+
