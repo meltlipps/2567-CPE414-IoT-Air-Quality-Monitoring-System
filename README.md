@@ -99,7 +99,7 @@ This project follows **Agile Development**:
 ---
 
 ## 💡 Credits
-Developed by **[Your Name/Team]** as part of the **CPE414 IoT Project**.  
+Developed by **แกงส้มปลาหมอคางดำ** as part of the **CPE414 IoT Project**.  
 For questions, contact **[Your Email/GitHub Link]**.  
 
 ---
