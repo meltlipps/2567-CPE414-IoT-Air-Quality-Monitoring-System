@@ -104,6 +104,3 @@ For questions, contact **[Your Email/GitHub Link]**.
 
 ---
 
-📌 **"Monitor the air, protect the future!"** 🌱
-```
-
