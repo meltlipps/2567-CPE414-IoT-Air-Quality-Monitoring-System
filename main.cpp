@@ -57,11 +57,14 @@ bool isPressing = false;
 unsigned long pressedTime  = 0;
 int lastState = LOW;  // the previous state from the input pin
 int currentState;
-int led_state = LOW;    // the current state of LE
 
+const int ledPin1 = 23;
+const int ledPin2 = 25;
+const int ledPin3 = 26;
+int ledState1 = LOW;    // the current state of LE
+int ledState2 = LOW;
+int ledState3 = LOW;
 
-const int ledPin = 23;
-bool ledState = false;
 // Task สำหรับอ่านค่าจากเซ็นเซอร์ PM
 
 // HTML content for the web page
@@ -397,6 +400,26 @@ const uint8_t myBitmapP1[] PROGMEM = {
 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
 };
 
+void updateLEDsBasedOnPM() {
+    if (pm2_5 > 5) {
+        digitalWrite(ledPin1, HIGH);
+    } else {
+        digitalWrite(ledPin1, LOW);
+    }
+
+    if (pm2_5 > 25) {
+        digitalWrite(ledPin2, HIGH);
+    } else {
+        digitalWrite(ledPin2, LOW);
+    }
+
+    if (pm2_5 > 30) {
+        digitalWrite(ledPin3, HIGH);
+    } else {
+        digitalWrite(ledPin3, LOW);
+    }
+}
+
 void readSensorTask(void *parameter)
 {
     while (1) // Loop ทำงานตลอดเวลา
@@ -588,8 +611,12 @@ void setup()
     button.setDebounceTime(50); // set debounce time to 50 milliseconds
     button.setCountMode(COUNT_FALLING);
 
-    pinMode(ledPin, OUTPUT);
-    digitalWrite(ledPin, LOW);
+    pinMode(ledPin1, OUTPUT);
+    digitalWrite(ledPin1, LOW);
+    pinMode(ledPin2, OUTPUT);
+    digitalWrite(ledPin2, LOW);
+    pinMode(ledPin3, OUTPUT);
+    digitalWrite(ledPin3, LOW);
 
      if (esp_sleep_get_wakeup_cause() == ESP_SLEEP_WAKEUP_TIMER)
     {
@@ -615,16 +642,15 @@ void setup()
 
 void loop()
 {
+    updateLEDsBasedOnPM();
     button.loop();
      if (button.isPressed() and state == 0) 
     {
         state = 1;
-        ledState = 1 ;
     }
      else if (button.isPressed() and state == 1)
      {
         state = 0;
-        ledState = 0 ;
      }
 
 unsigned long count = button.getCount();
