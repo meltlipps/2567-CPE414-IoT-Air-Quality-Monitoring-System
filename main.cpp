@@ -27,6 +27,7 @@ unsigned long lastCount = 0;
 ezButton button(BUTTON_PIN);
 
 float lastTemperatureC = 25.0; // ค่าเริ่มต้น (สามารถเปลี่ยนได้)
+float lastTemperatureF = 90.0; // ค่าเริ่มต้น (สามารถเปลี่ยนได้)
 
 // สร้าง Software Serial สำหรับการสื่อสารผ่าน RX และ TX
 HardwareSerial mySerial(2); // ใช้ Serial2 พร้อมระบุ RX = 16, TX = 17
@@ -72,7 +73,7 @@ const char* htmlContent = R"rawliteral(
 <!DOCTYPE HTML><html>
 <html>
 <head>
-    <title>ESP32 Air Quality Monitor</title>
+    <title>CPE414-IoT-Air-Quality-Monitoring-System</title>
     <style>
         body { font-family: Arial, sans-serif; text-align: center; }
         h1 { color: #0F3376; padding: 10px; }
@@ -80,7 +81,7 @@ const char* htmlContent = R"rawliteral(
     </style>
 </head>
 <body>
-    <h1>ESP32 Air Quality Monitor</h1>
+    <h1>CPE414-IoT-Air-Quality-Monitoring-System</h1>
     <p class="data">PM1: <span id="pm1">Loading...</span> ug/m3</p>
     <p class="data">PM2.5: <span id="pm2_5">Loading...</span> ug/m3</p>
     <p class="data">PM10: <span id="pm10">Loading...</span> ug/m3</p>
@@ -99,7 +100,7 @@ const char* htmlContent = R"rawliteral(
             })
             .catch(error => console.error('Error fetching data:', error));
         }
-        setInterval(fetchData, 2000);
+        setInterval(fetchData, 500);
         fetchData();
     </script>
 </body>
@@ -122,13 +123,20 @@ void handleSensorData() {
         lastTemperatureC = temperatureC; // อัปเดตค่าล่าสุด
     }
 
+    if (temperatureF == DEVICE_DISCONNECTED_F) {
+        temperatureF = lastTemperatureF;
+    } else {
+        lastTemperatureF = temperatureF; // อัปเดตค่าล่าสุด
+    }
+
     String json = "{";
     json += "\"pm1\": " + String(pm1) + ",";
     json += "\"pm2_5\": " + String(pm2_5) + ",";
     json += "\"pm10\": " + String(pm10) + ",";
-    json += "\"temperatureC\": " + String(sensors.getTempCByIndex(0)) + ",";
-    json += "\"temperatureF\": " + String(sensors.getTempFByIndex(0));
+    json += "\"temperatureC\": " + String(lastTemperatureC) + ",";
+    json += "\"temperatureF\": " + String(lastTemperatureF);
     json += "}";
+    Serial.println("Sending JSON: " + json);
     server.send(200, "application/json", json);
 }
 
